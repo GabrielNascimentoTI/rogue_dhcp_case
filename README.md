@@ -1,5 +1,119 @@
-# Isolamento de Trafego e Mitigacao de Conflito de Servidores DHCP
+# Isolamento de Trafego e Conflito entre Servidores DHCP
 
+Estudo de caso de troubleshooting de redes desenvolvido a partir de um incidente de instabilidade causado pela unificacao indevida de dominios de broadcast entre a Prefeitura e a Secretaria de Saude.
+
+O projeto demonstra diagnostico de incidentes, analise de trafego, identificacao de causa raiz e aplicacao de uma estrategia de contencao usando roteamento e uma nova sub-rede LAN.
+
+## Competencias demonstradas
+
+- Diagnostico de incidentes de rede e analise de causa raiz.
+- DHCP, fluxo DORA e isolamento de dominios de broadcast.
+- Fundamentos de redes TCP/IP e diferenca entre as camadas 2 e 3.
+- Captura e leitura de trafego com `tcpdump`.
+- Reconhecimento de servicos de rede com Nmap.
+- Planejamento de sub-rede e configuracao de roteador de fronteira.
+- Comunicacao tecnica de incidentes, impactos e plano de mitigacao.
+
+## Resumo do incidente
+
+Dois servidores DHCP estavam acessiveis pelo mesmo dominio de broadcast fisico devido a uma falha na entrega do enlace da operadora. Como resultado, clientes recebiam respostas concorrentes e podiam obter endereco IP, gateway e mascara de sub-rede incorretos.
+
+### Sintomas observados
+
+- Estacoes, celulares e impressoras recebendo leases do escopo errado.
+- Troca aleatoria de gateway e mascara de sub-rede.
+- Perda de acesso a impressoras e sistemas locais de atendimento.
+- Instabilidade recorrente durante renovacoes e novas concessoes DHCP.
+
+### Causa raiz
+
+Falha de isolamento de enlace que colocou os servidores DHCP da Prefeitura e da Secretaria de Saude no mesmo dominio de broadcast. O servidor que respondesse primeiro ao `DHCP Discover` poderia fornecer os parametros de rede ao cliente.
+
+## Diagnostico
+
+O diagnostico combinou analise passiva de pacotes e reconhecimento ativo de servicos, sem interromper o trafego de producao.
+
+### Descoberta de servidores DHCP com Nmap
+
+```bash
+sudo nmap -sU -p 67 --script broadcast-dhcp-discover
+```
+
+### Captura do fluxo DHCP com tcpdump
+
+```bash
+sudo tcpdump -i eth0 -n "port 67 or port 68" -v
+```
+
+### Evidencia principal
+
+Depois de um cliente da Secretaria de Saude enviar um `DHCP Discover` para `255.255.255.255`, foram observadas respostas `DHCP Offer` quase simultaneas dos servidores `172.168.103.1:67` e `192.168.1.254:67`. Esse comportamento confirmou o vazamento de broadcast e a concorrencia entre escopos.
+
+## Solucao aplicada
+
+Foi projetada uma contencao local com um roteador de fronteira entre o enlace da operadora e a rede interna da Secretaria de Saude.
+
+```text
+               LINK DA OPERADORA / PREFEITURA
+                          |
+                   MODEM DA OPERADORA
+                          |
+          +------------------------------------------+
+          |       ROTEADOR DE FRONTEIRA              |
+          | Interface WAN: cliente DHCP               |
+          | Interface LAN: 192.168.50.1               |
+          | Servidor DHCP nativo habilitado           |
+          +----------------------+-------------------+
+                           |
+          +------------------------------------------+
+          |       SWITCHES NAO GERENCIAVEIS          |
+          +----------------------+-------------------+
+                           |
+           +---------------------+---------------------+
+           |                     |                     |
+        Computadores          Impressoras          Dispositivos
+         192.168.50.x          192.168.50.x          192.168.50.x
+```
+
+### Implementacao
+
+1. Criacao do escopo exclusivo `192.168.50.0/24`.
+2. Configuracao da interface WAN como cliente DHCP.
+3. Configuracao da interface LAN como `192.168.50.1` e novo gateway.
+4. Habilitacao do servidor DHCP nativo do roteador.
+5. Contencao dos broadcasts DHCP na LAN interna, impedindo que os clientes alcancem diretamente o escopo externo.
+
+## Resultados
+
+| Objetivo | Antes da mitigacao | Depois da mitigacao |
+| --- | --- | --- |
+| Isolamento DHCP | Servidores concorrentes no mesmo dominio de broadcast | Escopo interno dedicado `192.168.50.0/24` |
+| Estabilidade dos hosts | Troca aleatoria de gateway e quedas | Leases controlados e conectividade estavel |
+| Acesso a perifericos | Impressoras inacessiveis por troca de IP | Acessibilidade mantida na LAN interna |
+
+## Evidencias do projeto
+
+As capturas e os registros serao adicionados depois de sanitizados:
+
+```text
+.
+├── assets/     # Diagramas e imagens do ambiente
+├── logs/       # Saidas do tcpdump, Nmap e analises textuais
+├── pcaps/      # Capturas .pcap ou .pcapng sanitizadas
+└── README.md   # Documentacao tecnica e resumo do caso
+```
+
+Nao publique credenciais, nomes de host, enderecos MAC ou enderecos IP sensiveis nas evidencias.
+
+## Perfil profissional
+
+**Gabriel de Souza do Nascimento**
+Analista de Suporte N2 / Infraestrutura de TI
+
+Este projeto representa experiencia pratica em suporte N2, redes, troubleshooting, analise de incidentes e documentacao tecnica.
+
+- GitHub: [GabrielNascimentoTI](https://github.com/GabrielNascimentoTI)
+- LinkedIn: [gabrielnascimentosouza](https://linkedin.com/in/gabrielnascimentosouza)
 ## Estudo de caso
 
 Resolucao de um incidente de concorrencia de Camada 2 entre a Prefeitura e a Secretaria de Saude.
